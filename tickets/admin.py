@@ -3,8 +3,8 @@ from .models import Auto_service, Task, Clients_queue
 
 
 class Auto_servicesAdmin(admin.ModelAdmin):
-    list_display = ['name', 'url', 'duration']
-    list_filter = ['name', 'url', 'duration']
+    list_display = ['name', 'url', 'duration', 'workplaces']
+    list_filter = ['name', 'url', 'duration', 'workplaces']
 
 
 class TaskAdmin(admin.ModelAdmin):
