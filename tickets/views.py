@@ -30,13 +30,13 @@ def get_services(href_prefix: str) -> str:
 
     return res
 
+
 def render_queue():
     queue = Clients_queue.objects.order_by('task__queue_number').all()
     str = ''
     for item in queue:
         str += f"<div>Client #{item.task.queue_number} on {item.service.name} {'done' if item.done else 'at work' if item.at_work else 'in queue'}</div>"
     return str
-
 
 
 class MenuView(View):
@@ -60,40 +60,41 @@ def find_service_by_url(url: str) -> Auto_service:
 
 
 def get_workplaces_count() -> int:
-    return Auto_service.objects.all().aggregate(Sum('workplaces'))
+    return Auto_service.objects.all().aggregate(Sum('workplaces'))['workplaces__sum']
 
-def get_task_at_work_count() -> int:
-    return len(Clients_queue.objects.filter(at_work=True))
+
+def get_task_at_work_count(srv: Auto_service) -> int:
+    return len(Clients_queue.objects.filter(at_work=True, service=srv))
 
 
 def register_new_task(request_command):
     required_service = find_service_by_url(request_command)
     if not required_service:
         raise PermissionError
-    q_set = Clients_queue.objects.filter(done=False)
-    task_at_work_count = get_task_at_work_count()
-    q_num = len(q_set)
-    s_set = Auto_service.objects.all()
+    undone_task = Clients_queue.objects.filter(done=False)
+    task_at_work_count = get_task_at_work_count(required_service)
+    undone_task_count = len(Clients_queue.objects.all())
+
     time_in_line = 0
     workplaces = get_workplaces_count()
-    for indx, srv in enumerate(s_set):
-        q_len = len(q_set.filter(service=srv))
+    for index, service in enumerate(Auto_service.objects.all()):
+        q_len = len(undone_task.filter(service=service, done=False, at_work=False))
 
-        time_in_line += q_len * srv.duration
-        if srv == required_service:
+        time_in_line += q_len * service.duration
+        if service == required_service:
             break
     task_item = Task(service_id=required_service,
                      car='AA0001AA',
                      registration=datetime.now(),
-                     queue_number=q_num
+                     queue_number=undone_task_count + 1
                      )
     task_item.save()
     Clients_queue.objects.create(service=required_service,
                                  task=task_item,
-                                 at_work=(task_at_work_count < workplaces['workplaces__sum']),
+                                 at_work=(task_at_work_count < workplaces),
                                  done=False,
                                  )
-    return q_num + 1, time_in_line
+    return undone_task_count + 1, time_in_line
 
 
 def erase_queue(request) -> HttpResponse:
@@ -108,14 +109,16 @@ def process_POST(request) -> HttpResponse:
         task = task_for_done.first()
         task.done = True
         task.at_work = False
+        task.is_next = False
         task.done_date = datetime.now()
         task.save()
 
-    task_for_work = Clients_queue.objects.filter(at_work=False, done=False)
+    task_for_work = Clients_queue.objects.filter(done=False)
     if len(task_for_work) > 0:
         task = task_for_work.first()
         task.done = False
         task.at_work = True
+        task.is_next = True
         task.save()
     return redirect('/processing')
 
@@ -146,9 +149,9 @@ def next_in_line(request) -> HttpResponse:
 
 
 def render_inline():
-    next_task = Clients_queue.objects.filter(done=False)
     rendered = '<div>Waiting for the next client</div>'
-    if len(next_task) > get_task_at_work_count():
+    next_task = Clients_queue.objects.filter(is_next=True)
+    if len(next_task) > 0:
         num = next_task.first().task.queue_number
         rendered = f'<div>Next ticket #{num}</div>'
     return rendered

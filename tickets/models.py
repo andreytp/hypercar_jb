@@ -33,6 +33,7 @@ class Clients_queue(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
     at_work = models.BooleanField(default=False)
     done = models.BooleanField(default=False)
+    is_next = models.BooleanField(default=False)
     done_date = models.DateTimeField(null=True)
 
     class Meta:
